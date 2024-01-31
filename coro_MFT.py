@@ -123,11 +123,6 @@ diviseur =max(max(row) for row in I_D0)
 I_Dnorm=I_D/diviseur
 I_D0norm=I_D0/diviseur
 
-# TF of frequency in sample ND in lambda/D
-freq = np.fft.fftfreq((ND),(ND*wavelength/(2*D)))
-freq2=np.fft.fftshift(freq)
-positive_frequencies = freq2[int(ND//2):] #selection of positive ferquencies
-
 #%%Plot of planes 
 #Circular aperture
 plt.figure('aperture')
@@ -177,11 +172,9 @@ plt.colorbar(label='Intensity')
 plt.figure()
 plt.title('coupe de I_C')
 plt.ylabel('I_C')
-frequence = np.fft.fftfreq((NC),(NC*wavelength*m/(2*D)))
-frequence2=np.fft.fftshift(frequence)
-positive_frequencies2 = frequence2[int(NC):]
+abss =(np.arange(NC))*wavelength/(m*2) # Determination of abcisse in lambda/D
 cut2=I_C2[NC//2,:NC]
-plt.plot(frequence2,coupes2, color='blue', alpha=1,label='plane b')
+plt.plot(abss,cut2, color='blue', alpha=1,label='plane b')
 
 #Image of the PSF PLANE D
 plt.figure('PLANE D')
@@ -202,9 +195,10 @@ plt.imshow((I_D0)**0.25)
 plt.colorbar(label='Intensity')
 
 #Longitdinal cut of intensity in plane D 
+abcisse= ((np.arange(ND//2))/(m*md)) # Determination of abcisse in lambda/D
 plt.figure()
-plt.plot(positive_frequencies,np.log10(I_D0norm[ND//2,ND//2:ND]) , color='blue', alpha=1,label='propagation without corona')
-plt.plot(positive_frequencies,np.log10(I_Dnorm[ND//2,ND//2:ND]), color='red', alpha=1,label='propagation with corona')
+plt.plot(abcisse,np.log10(I_D0norm[ND//2,ND//2:ND]) , color='blue', alpha=1,label='propagation without corona')
+plt.plot(abcisse,np.log10(I_Dnorm[ND//2,ND//2:ND]), color='red', alpha=1,label='propagation with corona')
 plt.legend()
 plt.title('Cut')
 plt.xlabel('$\Lambda$/D')
