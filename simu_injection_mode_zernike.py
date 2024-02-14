@@ -12,14 +12,14 @@ from scipy.optimize import minimize
 #%% VARIABLE DEFINTIONS
 wavelength = 700E-6  # wavelenght in meters
 D=8 # Diameter of circular aperture in meters
-N=1000 #Number of pixel for zerro padding 
+N=2000 #Number of pixel for zerro padding 
 NA = 750 # Number of pixels along the pupil diameter D
 NB = 100 # Number of pixels in the focal plane
 NC=NA #Number of pixels in plane C
 ND=1024 #Number of pixels in plane D
 md =  20 #sampling for TF in plane D 
 eps=2 #Epsilon coefficient eps=1 for Lyot corona and eps=2 for Rodier corona
-m =  1.22*2 #sampling (wavelenght/D)
+m1 = 10*2 #sampling (wavelenght/D)
 
 #%%Creation of circular aperture
 circle_radius = NA/2 #radius of aperture in number of pixels
@@ -33,6 +33,18 @@ x, y = np.meshgrid(x1, y1)
 aperture_radius = (x-x0)**2 + (y-y0)**2 <= circle_radius**2
 P=np.zeros((N,N))
 P[aperture_radius]=1
+
+circle_radius1 = N/2 #radius of aperture in number of pixels
+x01=(N/2)
+y01=(N/2)
+
+# creation a point grid in the xy plane
+x11 = np.linspace(0, N-1, N)
+y11 = np.linspace(0, N-1, N)
+x1, y1 = np.meshgrid(x11, y11)
+aperture_radius1 = (x1-x01)**2 + (y1-y01)**2 <= circle_radius1**2
+P1=np.zeros((N,N))
+P1[aperture_radius1]=1
 """
 main_rows, main_cols = N,N  # Dimensions du tableau principal
 sub_rows, sub_cols = NA,NA  # Dimensions du tableau inséré
@@ -74,11 +86,12 @@ def zernike_radial(n, m, rho):
 zernike_mode = np.zeros_like(P)
 radius = np.sqrt((x - x0) ** 2 + (y - y0) ** 2)
 theta = np.arctan2(y - y0, x - x0)
-amplitude_rms=20
-modes=[(1,-1,0.01)]
+amplitude_rad= 35E-9
+modes=[(2,-2,35E-9)]
 for mode in modes:
     n, m, amplitude_rms = mode
-    amplitude = amplitude_rms / np.sqrt(n + 1)
+    #pour le tip tilt amplitude = amplitude_rad/(2*np.pi)
+    amplitude = amplitude_rad
     zernike_mode += zernike_polar(radius, theta, amplitude, n, m)
 
 # Affichage du mode de Zernike injecté dans l'ouverture circulaire
@@ -135,7 +148,7 @@ plt.imshow(P_C)
 plt.colorbar(label='Intensity')
 #%%Function for calculating the semi-analytical Fourier Transform 
 
-def MFT (NA,NB,m,E,inv=False):
+def MFT (NA,NB,m1,E,inv=False):
     """
     NA = Input table
     NB= output tabe
@@ -145,7 +158,7 @@ def MFT (NA,NB,m,E,inv=False):
     """
     #Vectors defintinion for TF 
     xk = yk = (np.arange(NA) - NA/2)  * 1/NA
-    ul = vl = (np.arange(NB) - NB/2) * m/NB
+    ul = vl = (np.arange(NB) - NB/2) * m1/NB
     #vector formatting in column format
     U = (np.array(ul)).reshape(-1, 1)
     X = (np.array(xk)).reshape(-1, 1)
@@ -169,7 +182,7 @@ def MFT (NA,NB,m,E,inv=False):
 
 #%% Calcul of electric field
 # PLANE A
-E_A=1*P*zernike_mode # electric field  plane A 
+E_A=1*P*np.exp((1j*2*np.pi*zernike_mode)/wavelength) # electric field  plane A 
 I_A=np.abs(E_A)**2 #Intensity plane A 
 
 plt.figure('A')
@@ -179,17 +192,20 @@ plt.colorbar(label='Intensity')
 
 # PLANE B 
 #Calcul of the direct TF of the electric field at plane B 
-E_B = MFT(N, NB, m, E_A)
+E_B = MFT(N, NB, m1, E_A)
 I_B=np.abs(E_B )**2
 E_B2=E_B*MFP #Multiplying the B electric field by the mask 
 I_B2=np.abs(E_B2)**2
-
+plt.figure('plane B before mask')
+plt.title('plane B before mask')
+plt.imshow(np.log10(I_B))
+plt.colorbar(label='Intensity') 
 # PLANE C
 #Calcul of the inverse TF of the elec field in plane B  
-E_C= MFT(NB, N, m, E_B2,inv=True)
+E_C= MFT(NB, N, m1, E_B2,inv=True)
 
 #Determination of the elec field at the C plane multiplied by the lyot stop 
-E_C2=(E_A-eps*E_C)*(1-P_C)
+E_C2=(E_A-eps*E_C)*(1-P_C)*(P1)
 I_C2=np.abs(E_C2)**2
 plt.figure('PLANE C')
 plt.title('plane C')
@@ -230,125 +246,3 @@ plt.figure('rapport des I_f')
 plt.title('rapport des I_f')
 plt.imshow((I_f))
 plt.colorbar(label='Intensity')
-
-"""
-# %%Champ électrique prédit à partir de la mesure d'intensité
-# Fonction qui prédit la différence d'intensité en fonction des coefficients de Zernike
-measured_intensity_difference=((I_R-I_D0))
-zernike_modes = np.random.rand(5, 1000, 1000)
-n_modes=5
-def predict_intensity_difference_zernike(coefficients, zernike_modes):
-    # Calcul de la différence d'intensité prédite en fonction des coefficients de Zernike
-    predicted_intensity_difference = np.dot(coefficients, zernike_modes)
-    return predicted_intensity_difference
-
-# Fonction de coût pour l'optimisation
-def cost_function_difference(coefficients, measured_intensity_difference, zernike_modes):
-    # Prédiction de la différence d'intensité
-    predicted_intensity_difference = predict_intensity_difference_zernike(coefficients, zernike_modes)
-    # Calcul de la différence entre la différence d'intensité prédite et la différence d'intensité mesurée
-    difference = predicted_intensity_difference - measured_intensity_difference
-    # Calcul de la somme des carrés de la différence
-    cost = np.sum(difference**2)
-    return cost
-
-# Coefficients initiaux de Zernike
-coefficients=initial_guess = np.zeros(n_modes)
-
-# Effectuer l'optimisation pour ajuster les coefficients de Zernike
-result = minimize(cost_function_difference, initial_guess, args=(measured_intensity_difference, zernike_modes))
-
-# Coefficients de Zernike ajustés
-fitted_coefficients = result.x
-
-
-
-#D-plane intensity normalization for propagation without a coronagraph 
-# Found maximum in the list
-diviseur =max(max(row) for row in I_D0)
-I_Dnorm=I_D/diviseur
-I_D0norm=I_D0/diviseur
-
-
-#%%Plot of planes 
-#Circular aperture
-plt.figure('aperture')
-plt.title('aperture')
-plt.imshow(P)
-plt.colorbar(label='Intensity')
-plt.show()
-
-#Image of the PSF PLANE B before MFP 
-plt.figure('plane B before mask')
-plt.title('plane B before mask')
-plt.imshow(np.log10(I_B))
-plt.colorbar(label='Intensity') 
-
-#Image of the mask
-plt.figure('m')
-plt.title('m')
-plt.imshow(MFP)
-plt.colorbar(label='Intensity')
-
-#Image of the PSF PLANE B after MFP
-plt.figure('plane B after MFP')
-plt.title('plane B after MFP')
-plt.imshow((I_B2)**0.25) #puissance 0.25 for a better display 
-plt.colorbar(label='Intensity')
-
-#Image of the PSF PLANE C before lyot stop
-I_C=np.abs(E_C)**2
-plt.figure('c')
-plt.title('c')
-plt.imshow((I_C)**0.25)
-plt.colorbar(label='Intensity')
-
-#Image of Lyot stop 
-plt.figure('LS')
-plt.title('LS')
-plt.imshow(P_C)
-plt.colorbar(label='Intensity')
-
-#Image of the PSF PLANE C after lyot stop
-plt.figure('plane C after lyot stop')
-plt.title('plane C after lyot stop')
-plt.imshow(I_C2)
-plt.colorbar(label='Intensity')
-
-# Intensity of plane C  (longitundinal cut)
-plt.figure()
-plt.title('coupe de I_C')
-plt.ylabel('I_C')
-abss =(np.arange(NC))*wavelength/(m*2) # Determination of abcisse in lambda/D
-cut2=I_C2[NC//2,:NC]
-plt.plot(abss,cut2, color='blue', alpha=1,label='plane b')
-
-#Image of the PSF PLANE D
-plt.figure('PLANE D')
-plt.title('plane D')
-plt.imshow((I_D)**0.25)
-plt.colorbar(label='Intensity')
-
-#Image of the PSF PLANE D normalized 
-plt.figure('PLANE D normalized with max')
-plt.title('plane D normalized with max')
-plt.imshow(I_Dnorm)
-plt.colorbar(label='Intensity')
-
-#Image of plane D without corona
-plt.figure('PLANE D0')
-plt.title('plane D0')
-plt.imshow((I_D0)**0.25)
-plt.colorbar(label='Intensity')
-
-#Longitdinal cut of intensity in plane D 
-abcisse= ((np.arange(ND//2))/(m*md)) # Determination of abcisse in lambda/D
-plt.figure()
-plt.plot(abcisse,np.log10(I_D0norm[ND//2,ND//2:ND]) , color='blue', alpha=1,label='propagation without corona')
-plt.plot(abcisse,np.log10(I_Dnorm[ND//2,ND//2:ND]), color='red', alpha=1,label='propagation with corona')
-plt.legend()
-plt.title('Cut')
-plt.xlabel('$\Lambda$/D')
-plt.ylabel('I_D')
-plt.show()
-"""
